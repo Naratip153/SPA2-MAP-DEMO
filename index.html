@@ -1,0 +1,1908 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แผนที่ 3D โรงเรียนสภาราชินี 2 จังหวัดตรัง</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Prompt & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Prompt:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            font-family: 'Prompt', 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            position: relative;
+        }
+
+        /* ป้ายชื่ออาคาร 3D ลอยบนหน้าจอ */
+        .building-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(6px);
+            color: #f8fafc;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            pointer-events: auto;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+
+        .building-label:hover,
+        .building-label.active {
+            background: #2563eb;
+            border-color: #93c5fd;
+            transform: translate(-50%, -115%) scale(1.08);
+            z-index: 20;
+        }
+
+        .building-label::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0;
+            border-style: solid;
+            border-color: rgba(15, 23, 42, 0.82) transparent transparent transparent;
+        }
+
+        .building-label:hover::after,
+        .building-label.active::after {
+            border-color: #2563eb transparent transparent transparent;
+        }
+
+        /* Custom Scrollbar สำหรับ Sidebar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.5);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.8);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-800">
+
+    <!-- พื้นที่แสดงผล 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- เลเยอร์สำหรับป้ายชื่ออาคาร 3D -->
+    <div id="labels-container" class="fixed inset-0 pointer-events-none overflow-hidden z-10"></div>
+
+    <!-- แถบหัวข้อด้านบน (Header) -->
+    <header
+        class="fixed top-4 left-4 right-4 md:right-auto z-30 flex items-center justify-between md:justify-start gap-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl shadow-lg border border-slate-200/60 dark:border-slate-700/60">
+        <div class="flex items-center gap-3">
+            <!-- ตราสัญลักษณ์โรงเรียนจำลอง -->
+            <div
+                class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold shadow-md shrink-0">
+                ส.ร.2
+            </div>
+            <div>
+                <h1 class="text-base md:text-lg font-bold text-slate-800 dark:text-white leading-tight">
+                    โรงเรียนสภาราชินี 2
+                </h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    แผนที่จำลอง 3D (Saparachinee 2 School, Trang)
+                </p>
+            </div>
+        </div>
+        <!-- ปุ่มเปิด/ปิดเมนูบนมือถือ -->
+        <button id="mobile-menu-btn"
+            class="md:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
+                </path>
+            </svg>
+        </button>
+    </header>
+
+    <!-- แผงควบคุมปุ่มเครื่องมือมุมขวาบน -->
+    <div class="fixed top-20 md:top-4 right-4 z-30 flex flex-wrap justify-end gap-2">
+        <!-- ปุ่มรีเซ็ตมุมมองภาพรวม -->
+        <button id="btn-reset-view"
+            class="flex items-center gap-2 bg-white/90 dark:bg-slate-900/90 hover:bg-blue-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-md border border-slate-200/60 dark:border-slate-700/60 text-xs md:text-sm font-medium transition cursor-pointer"
+            title="กลับสู่มุมมองภาพรวม">
+            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+                </path>
+            </svg>
+            <span class="hidden sm:inline">ภาพรวม</span>
+        </button>
+
+        <!-- ปุ่มเปิด/ปิดป้ายชื่ออาคาร -->
+        <button id="btn-toggle-labels"
+            class="flex items-center gap-2 bg-white/90 dark:bg-slate-900/90 hover:bg-blue-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-md border border-slate-200/60 dark:border-slate-700/60 text-xs md:text-sm font-medium transition cursor-pointer"
+            title="แสดง/ซ่อนป้ายชื่ออาคาร">
+            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z">
+                </path>
+            </svg>
+            <span class="hidden sm:inline">ป้ายชื่อ</span>
+        </button>
+
+        <!-- ปุ่มสลับโหมดกลางวัน / กลางคืน -->
+        <button id="btn-toggle-theme"
+            class="flex items-center gap-2 bg-white/90 dark:bg-slate-900/90 hover:bg-amber-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-md border border-slate-200/60 dark:border-slate-700/60 text-xs md:text-sm font-medium transition cursor-pointer"
+            title="สลับโหมดกลางวัน / กลางคืน">
+            <span id="theme-icon">☀️</span>
+            <span id="theme-text" class="hidden sm:inline">กลางวัน</span>
+        </button>
+    </div>
+
+    <!-- แผงควบคุมด้านข้าง (Sidebar) รายชื่ออาคาร -->
+    <aside id="sidebar"
+        class="fixed top-24 left-4 bottom-4 w-72 md:w-80 bg-white/92 dark:bg-slate-900/92 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200/70 dark:border-slate-700/70 z-30 flex flex-col transition-transform duration-300 -translate-x-[120%] md:translate-x-0">
+        <div class="p-4 border-b border-slate-200/70 dark:border-slate-700/70 flex items-center justify-between">
+            <div>
+                <h2 class="font-bold text-slate-800 dark:text-white text-sm md:text-base">สถานที่และอาคารภายในโรงเรียน
+                </h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">คลิกเพื่อสำรวจตำแหน่งและรายละเอียด</p>
+            </div>
+            <button id="close-sidebar-btn"
+                class="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                ✕
+            </button>
+        </div>
+
+        <!-- ช่องค้นหา -->
+        <div class="p-3 border-b border-slate-200/50 dark:border-slate-700/50">
+            <div class="relative">
+                <input type="text" id="search-input" placeholder="ค้นหาชื่ออาคาร, สระน้ำ, หอประชุม..."
+                    class="w-full pl-9 pr-3 py-2 text-xs md:text-sm bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-xl border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition">
+                <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <!-- รายการสถานที่ -->
+        <div id="building-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+            <!-- สร้างรายการด้วย JavaScript -->
+        </div>
+
+        <!-- คำแนะนำการใช้งาน -->
+        <div
+            class="p-3 bg-slate-50/80 dark:bg-slate-800/60 rounded-b-2xl border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 space-y-1">
+            <div class="flex items-center gap-1.5"><span>🖱️</span> <span>คลิกซ้ายค้าง + ลาก เพื่อหมุนมุมมอง</span>
+            </div>
+            <div class="flex items-center gap-1.5"><span>🔍</span> <span>เลื่อนลูกกลิ้ง (Scroll) เพื่อซูมเข้า-ออก</span>
+            </div>
+            <div class="flex items-center gap-1.5"><span>👆</span> <span>คลิกที่ตัวอาคาร 3D เพื่อดูข้อมูล</span></div>
+        </div>
+    </aside>
+
+    <!-- การ์ดแสดงรายละเอียดอาคารเมื่อถูกเลือก (Detail Card) -->
+    <div id="detail-card"
+        class="fixed bottom-4 right-4 left-4 md:left-auto md:w-96 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/80 z-30 p-5 transition-all duration-300 translate-y-[150%] opacity-0 pointer-events-none">
+        <div class="flex items-start justify-between gap-3 mb-3">
+            <div class="flex items-center gap-2.5">
+                <span id="detail-badge"
+                    class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">โซนอาคารเรียน</span>
+                <span id="detail-floors" class="text-xs font-medium text-slate-500 dark:text-slate-400">3 ชั้น</span>
+            </div>
+            <button id="close-detail-btn"
+                class="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 text-sm transition cursor-pointer">
+                ✕
+            </button>
+        </div>
+
+        <h3 id="detail-title" class="text-lg font-bold text-slate-800 dark:text-white mb-1.5">ชื่ออาคาร</h3>
+        <p id="detail-desc" class="text-xs md:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-4">
+            รายละเอียดของอาคาร...
+        </p>
+
+        <div class="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3 border border-slate-100 dark:border-slate-700/60">
+            <h4 class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                <span>✨</span> จุดเด่นและห้องสำคัญภายใน
+            </h4>
+            <ul id="detail-highlights"
+                class="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc list-inside">
+                <!-- รายการจุดเด่น -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- สคริปต์สร้างแผนที่ 3D ด้วย Three.js -->
+    <script>
+        // ==========================================
+        // 1. ข้อมูลอาคารและสถานที่ภายในโรงเรียนสภาราชินี 2
+        // ==========================================
+        const CAMPUS_LOCATIONS = [
+            {
+                id: 'gate-4046',
+                name: 'ประตูทางเข้าหลัก (ติดถนนตรัง-สิเกา)',
+                shortName: 'ประตูทางเข้าหลัก',
+                category: 'จุดต้อนรับและจราจร',
+                badgeColor: 'bg-amber-100 text-amber-800',
+                floors: 'ทางเข้า-ออกหลัก',
+                position: { x: 24, y: 0, z: 68 },
+                cameraOffset: { x: 35, y: 22, z: 95 },
+                description: 'ทางเข้าหลักของโรงเรียนสภาราชินี 2 เชื่อมต่อกับทางหลวงแผ่นดินหมายเลข 4046 (สายตรัง-สิเกา) บริเวณด้านขวาของพื้นที่โรงเรียน พร้อมป้อมรักษาความปลอดภัยและถนนเมนหลักตรงเข้าสู่ภายใน',
+                highlights: [
+                    'ทางเข้ารถแบบเปิดโล่ง มีเสาประดับและไม้กั้น',
+                    'ป้อมยามรักษาความปลอดภัยตลอด 24 ชั่วโมง',
+                    'ถนนเมนหลักกว้างขวาง เชื่อมต่อทุกโซนของโรงเรียน'
+                ]
+            },
+            {
+                id: 'front-pond',
+                name: 'สระน้ำและสวนหย่อมโซนด้านหน้า',
+                shortName: 'สระน้ำโซนหน้า (เกาะกลางน้ำ)',
+                category: 'ภูมิทัศน์และสิ่งแวดล้อม',
+                badgeColor: 'bg-cyan-100 text-cyan-800',
+                floors: 'พื้นที่สีเขียว',
+                position: { x: -5, y: 0, z: 42 },
+                cameraOffset: { x: -30, y: 35, z: 75 },
+                description: 'แหล่งน้ำขนาดใหญ่บริเวณด้านหน้าฝั่งซ้ายติดแนวรั้วทางเข้า มีเกาะต้นไม้เขียวชอุ่มอยู่กลางสระ ช่วยสร้างบรรยากาศร่มรื่น เย็นสบาย และเป็นระบบนิเวศธรรมชาติภายในโรงเรียน',
+                highlights: [
+                    'เกาะต้นไม้ธรรมชาติขนาดเล็กกลางสระน้ำ',
+                    'แนวต้นไม้ใหญ่ร่มรื่นรอบขอบสระ',
+                    'ช่วยปรับภูมิทัศน์และลดความร้อนบริเวณหน้าโรงเรียน'
+                ]
+            },
+            {
+                id: 'building-1',
+                name: 'อาคารเรียน 1 (อาคารเรียนมัธยมศึกษาตอนต้น)',
+                shortName: 'อาคารเรียน 1',
+                category: 'อาคารเรียน',
+                badgeColor: 'bg-blue-100 text-blue-800',
+                floors: '3 ชั้น',
+                position: { x: -6, y: 0, z: 16 },
+                cameraOffset: { x: -28, y: 28, z: 45 },
+                description: 'อาคารเรียนหลังแรก ตัวอาคารสีเหลือง หลังคาสีแดง ใช้เป็นอาคารเรียนหลักสำหรับนักเรียนระดับชั้นมัธยมศึกษาตอนต้น พร้อมห้องเรียนมาตรฐานและห้องกิจกรรม',
+                highlights: [
+                    'ห้องเรียนระดับชั้นมัธยมศึกษาตอนต้น (ม.1 - ม.3)',
+                    'ห้องแนะแนวและห้องให้คำปรึกษา',
+                    'ห้องพักครูหมวดวิชาพื้นฐาน'
+                ]
+            },
+            {
+                id: 'building-2',
+                name: 'อาคารเรียน 2 (อาคารอำนวยการและบริหาร)',
+                shortName: 'อาคารเรียน 2 (อำนวยการ)',
+                category: 'อาคารอำนวยการและบริหาร',
+                badgeColor: 'bg-indigo-100 text-indigo-800',
+                floors: '3 ชั้น',
+                position: { x: -11, y: 0, z: -2 },
+                cameraOffset: { x: -36, y: 28, z: 26 },
+                description: 'อาคารเรียนหลังกลางและเป็นศูนย์กลางการบริหารงานของโรงเรียนสภาราชินี 2 (อาคารอำนวยการ) ด้านหน้าเป็นสระน้ำขนาดเล็กระหว่างอาคารเรียน 1 และ 2',
+                highlights: [
+                    'ห้องผู้อำนวยการ และห้องรองผู้อำนวยการทั้ง 4 ฝ่าย',
+                    'ห้องธุรการ การเงิน พัสดุ และห้องบริหารงานวิชาการ',
+                    'ห้องประชุมย่อยและห้องประชาสัมพันธ์'
+                ]
+            },
+            {
+                id: 'small-pond',
+                name: 'สระน้ำขนาดเล็กระหว่างอาคารเรียน 1 และ 2',
+                shortName: 'สระน้ำขนาดเล็ก',
+                category: 'ภูมิทัศน์และสิ่งแวดล้อม',
+                badgeColor: 'bg-cyan-100 text-cyan-800',
+                floors: 'แหล่งน้ำภายใน',
+                position: { x: -8.5, y: 0, z: 7 },
+                cameraOffset: { x: 12, y: 36, z: 16 },
+                description: 'สระน้ำขนาดเล็กระหว่างอาคารเรียน 1 และอาคารเรียน 2 (อำนวยการ)',
+                highlights: []
+            },
+            {
+                id: 'inner-pond',
+                name: 'สระน้ำโซนด้านใน',
+                shortName: 'สระน้ำโซนใน',
+                category: 'ภูมิทัศน์และสิ่งแวดล้อม',
+                badgeColor: 'bg-cyan-100 text-cyan-800',
+                floors: 'แหล่งน้ำภายใน',
+                position: { x: -15, y: 0, z: -33.5 },
+                cameraOffset: { x: -38, y: 32, z: -15 },
+                description: 'สระน้ำทรงสี่เหลี่ยมขนาดใหญ่บริเวณโซนด้านใน คั่นกลางระหว่างอาคารเรียน 2 (อำนวยการ) และอาคารเรียน 3 ช่วยสร้างทัศนียภาพที่โปร่งสบาย',
+                highlights: [
+                    'คั่นกลางระหว่างอาคารเรียน 2 (อำนวยการ) และอาคารเรียน 3',
+                    'มีถนนและทางเดินเชื่อมต่อรอบสระน้ำทั้งฝั่งซ้ายและขวา'
+                ]
+            },
+            {
+                id: 'rear-main-building',
+                name: 'อาคารเรียน 3',
+                shortName: 'อาคารเรียน 3',
+                category: 'อาคารเรียน',
+                badgeColor: 'bg-blue-100 text-blue-800',
+                floors: '3 ชั้น (หลังคาโซลาร์เซลล์)',
+                position: { x: -13, y: 0, z: -50 },
+                cameraOffset: { x: -35, y: 32, z: -20 },
+                description: 'อาคารเรียน 3 ขนาด 3 ชั้น ตั้งอยู่บริเวณโซนด้านหลังสุดของโรงเรียน ติดกับสระน้ำโซนใน โดดเด่นด้วยหลังคาขนาดใหญ่ที่ติดตั้งแผงโซลาร์เซลล์ (Solar Rooftop) และมีถนนด้านหลังอาคาร',
+                highlights: [
+                    'อาคารเรียน 3 ชั้น',
+                    'ติดตั้งแผงโซลาร์เซลล์บนหลังคาเพื่อพลังงานสะอาด',
+                    'อยู่ติดกับสระน้ำโซนใน',
+                    'มีถนนด้านหลังอาคารเชื่อมต่อโซนต่างๆ'
+                ]
+            },
+            {
+                id: 'building-4',
+                name: 'อาคารเรียน 4',
+                shortName: 'อาคารเรียน 4',
+                category: 'อาคารเรียน',
+                badgeColor: 'bg-blue-100 text-blue-800',
+                floors: '3 ชั้น (ชั้นล่างเป็นใต้ถุน)',
+                position: { x: 14, y: 0, z: -60 },
+                cameraOffset: { x: 42, y: 30, z: -35 },
+                description: 'อาคารเรียนทรงยาวสีเทา ชั้นล่างเป็นใต้ถุนโล่ง หลังคาสีน้ำเงิน ตั้งอยู่บริเวณมุมขวาด้านหลังของโรงเรียน ขนานกับถนนเมนฝั่งตะวันออก',
+                highlights: [
+                    'ชั้นล่างเป็นใต้ถุนโล่ง',
+                    'ห้องเรียนอยู่ชั้น 2 และชั้น 3'
+                ]
+            },
+            {
+                id: 'canteen-hall-gym',
+                name: 'อาคารโรงอาหาร หอประชุม และโรงยิม',
+                shortName: 'โรงอาหาร / หอประชุม / โรงยิม',
+                category: 'โรงอาหาร กีฬา และหอประชุม',
+                badgeColor: 'bg-purple-100 text-purple-800',
+                floors: '2 ชั้น',
+                position: { x: 39, y: 0, z: 35 },
+                cameraOffset: { x: 60, y: 28, z: 62 },
+                description: 'อาคารสองชั้นฝั่งขวาในโซนหน้าโรงเรียน ชั้นล่างเป็นโรงอาหาร ส่วนชั้น 2 ใช้เป็นหอประชุมและโรงยิม',
+                highlights: [
+                    'ชั้น 1: โรงอาหาร',
+                    'ชั้น 2: หอประชุมและโรงยิม'
+                ]
+            },
+            {
+                id: 'workshop-buildings',
+                name: 'กลุ่มอาคารโรงฝึกงานและอาคารประกอบฝั่งขวา',
+                shortName: 'อาคารโรงฝึกงาน / คหกรรม',
+                category: 'อาคารปฏิบัติการ',
+                badgeColor: 'bg-orange-100 text-orange-800',
+                floors: '1-2 ชั้น',
+                position: { x: 24, y: 0, z: -38 },
+                cameraOffset: { x: 48, y: 24, z: -18 },
+                description: 'กลุ่มอาคารชั้นเดียวและอาคารประกอบบริเวณแนวฝั่งขวาติดถนนเมน ใช้สำหรับการเรียนการสอนวิชาการงานอาชีพ ศิลปะ ดนตรี และห้องพยาบาล',
+                highlights: [
+                    'ห้องปฏิบัติการการงานอาชีพและเทคโนโลยี',
+                    'ห้องดนตรีไทย-สากล และห้องนาฏศิลป์',
+                    'อยู่ใกล้ทางเชื่อมถนนเมนหลัก เดินทางสะดวก'
+                ]
+            },
+            {
+                id: 'mujalin-building',
+                name: 'อาคารมุจลินท์',
+                shortName: 'อาคารมุจลินท์',
+                category: 'อาคารปฏิบัติการ',
+                badgeColor: 'bg-teal-100 text-teal-800',
+                floors: '1 ชั้น',
+                position: { x: -21, y: 0, z: -67.5 },
+                cameraOffset: { x: -17, y: 17, z: -89 },
+                labelHeight: 5.5,
+                description: 'อาคารห้องแถวชั้นเดียวแนวยาว ตั้งอยู่ระหว่างถนนด้านหลังอาคารเรียน 3 กับรั้วด้านหลังโรงเรียน',
+                highlights: [
+                    'ห้องซ้อมดนตรี',
+                    'ห้องวาดภาพ',
+                    'ห้องเก็บของ'
+                ]
+            }
+        ];
+
+        // ==========================================
+        // 2. ตัวแปรหลักของ Three.js
+        // ==========================================
+        let scene, camera, renderer, controls;
+        let sunLight, ambientLight, hemiLight;
+        let buildingMeshes = [];
+        let nightLights = [];
+        let labelElements = {};
+        let isNightMode = false;
+        let showLabels = true;
+        let selectedLocationId = null;
+
+        let isCameraTransitioning = false;
+        let targetCameraPos = new THREE.Vector3();
+        let targetControlsLookAt = new THREE.Vector3();
+
+        const CAMPUS_ANGLE = 0.24;
+
+        const DEFAULT_CAM_POS = new THREE.Vector3(4, 115, 125);
+        const DEFAULT_LOOK_AT = new THREE.Vector3(4, 0, -5);
+
+        // ==========================================
+        // 3. ฟังก์ชันเริ่มต้นระบบ 3D (Initialization)
+        // ==========================================
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.FogExp2(0x87ceeb, 0.0022);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+            camera.position.copy(DEFAULT_CAM_POS);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.copy(DEFAULT_LOOK_AT);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.minDistance = 15;
+            controls.maxDistance = 230;
+            controls.update();
+
+            controls.addEventListener('start', () => {
+                isCameraTransitioning = false;
+            });
+
+            setupLighting();
+            buildCampusEnvironment();
+            buildRoadsAndPaths();
+            buildPonds();
+            buildCampusBuildings();
+            buildTreesAndFoliage();
+
+            setupUI();
+            createFloatingLabels();
+            setupEvents();
+        }
+
+        // ==========================================
+        // 4. ตั้งค่าแสงสว่าง
+        // ==========================================
+        function setupLighting() {
+            hemiLight = new THREE.HemisphereLight(0xffffff, 0x3b5e2b, 0.65);
+            hemiLight.position.set(0, 100, 0);
+            scene.add(hemiLight);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
+            scene.add(ambientLight);
+
+            sunLight = new THREE.DirectionalLight(0xfff5e4, 1.15);
+            sunLight.position.set(60, 110, 70);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 10;
+            sunLight.shadow.camera.far = 300;
+            const d = 110;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            sunLight.shadow.bias = -0.0005;
+            scene.add(sunLight);
+        }
+
+        // ==========================================
+        // 5. สร้างพื้นดิน ขอบเขตโรงเรียน
+        // ==========================================
+        function buildCampusEnvironment() {
+            const groundGeo = new THREE.PlaneGeometry(500, 500);
+            const groundMat = new THREE.MeshLambertMaterial({ color: 0x3a6b35 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            const originalFrontLeft = [-12, 72];
+            const originalRearLeft = [-39, -68];
+            const leftFenceSetback = 10;
+            const leftShiftX = leftFenceSetback * Math.hypot(27, 140) / 140;
+            const frontLeft = [originalFrontLeft[0] - leftShiftX, originalFrontLeft[1] + leftShiftX * 7.5 / 32];
+            const gateLeft = [20, 64.5];
+            const gateRight = [27, 62.8];
+            const frontRight = [61, 55];
+            const rearRight = [26, -79];
+            const rearLeft = [originalRearLeft[0] - leftShiftX, originalRearLeft[1] + leftShiftX * 11 / 65];
+            const boundary = [frontLeft, gateLeft, gateRight, frontRight, rearRight, rearLeft];
+            const campusShape = new THREE.Shape();
+            campusShape.moveTo(frontLeft[0], -frontLeft[1]);
+            for (const [x, z] of boundary.slice(1)) {
+                campusShape.lineTo(x, -z);
+            }
+            campusShape.closePath();
+
+            const campusGeo = new THREE.ShapeGeometry(campusShape);
+            const campusMat = new THREE.MeshLambertMaterial({ color: 0x4c8c42 });
+            const campusGround = new THREE.Mesh(campusGeo, campusMat);
+            campusGround.rotation.x = -Math.PI / 2;
+            campusGround.position.y = 0.05;
+            campusGround.receiveShadow = true;
+            scene.add(campusGround);
+
+            createFenceLine(...frontLeft, ...gateLeft);
+            createSchoolSign(originalFrontLeft, gateLeft);
+            createFenceLine(...gateRight, ...frontRight);
+            createFenceLine(...frontRight, ...rearRight);
+            createFenceLine(...rearRight, ...rearLeft);
+            createFenceLine(...rearLeft, ...frontLeft);
+        }
+
+        function createSchoolSign([x1, z1], [x2, z2]) {
+            const group = new THREE.Group();
+            const angle = Math.atan2(z2 - z1, x2 - x1);
+            const alongFence = 0.46;
+            const faceOffset = 0.32;
+            group.rotation.y = -angle;
+            group.position.set(
+                x1 + (x2 - x1) * alongFence - Math.sin(angle) * faceOffset,
+                0,
+                z1 + (z2 - z1) * alongFence + Math.cos(angle) * faceOffset
+            );
+
+            const stone = new THREE.MeshLambertMaterial({ color: 0xc9b28b });
+            const gold = new THREE.MeshLambertMaterial({ color: 0xc99743 });
+            const base = new THREE.MeshLambertMaterial({ color: 0x8e5136 });
+            const dark = new THREE.MeshLambertMaterial({ color: 0x211d18 });
+
+            function addMesh(geometry, material, x, y, z) {
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x, y, z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+                return mesh;
+            }
+
+            function addBox(width, height, depth, material, x, y, z) {
+                return addMesh(new THREE.BoxGeometry(width, height, depth), material, x, y, z);
+            }
+
+            const crest = new THREE.Shape();
+            crest.moveTo(-6.75, 0.35);
+            crest.lineTo(-6.75, 3.7);
+            crest.bezierCurveTo(-5.5, 4.1, -5.0, 3.55, -4.0, 4.0);
+            crest.bezierCurveTo(-2.8, 4.0, -2.1, 4.68, 0, 4.68);
+            crest.bezierCurveTo(2.1, 4.68, 2.8, 4.0, 4.0, 4.0);
+            crest.bezierCurveTo(5.0, 3.55, 5.5, 4.1, 6.75, 3.7);
+            crest.lineTo(6.75, 0.35);
+            crest.closePath();
+            addMesh(new THREE.ExtrudeGeometry(crest, { depth: 0.83, bevelEnabled: false }),
+                gold, 0, 0, -0.49);
+            const insetCrest = addMesh(new THREE.ShapeGeometry(crest), stone, 0, 0.02, 0.35);
+            insetCrest.scale.set(0.974, 0.967, 1);
+            addBox(14.1, 0.44, 1.04, base, 0, 0.22, -0.02);
+            addBox(10.3, 2.53, 0.11, gold, 0, 2.02, 0.4);
+
+            for (const side of [-1, 1]) {
+                const x = side * 5.58;
+                addBox(0.77, 3.78, 0.99, stone, x, 2.25, 0);
+                addBox(0.9, 0.25, 1.08, gold, x, 0.62, 0);
+                addBox(1.06, 0.19, 1.14, gold, x, 4.19, 0);
+                addBox(0.86, 0.17, 0.91, gold, x, 4.37, 0);
+                const spire = addMesh(new THREE.ConeGeometry(0.57, 0.92, 4), gold, x, 4.9, 0);
+                spire.rotation.y = Math.PI / 4;
+
+                addBox(0.74, 1.96, 0.1, gold, side * 6.39, 1.99, 0.39);
+                addBox(0.59, 1.79, 0.1, dark, side * 6.39, 1.99, 0.41);
+                const ornament = addBox(0.27, 0.27, 0.06, gold, side * 6.39, 2.03, 0.48);
+                ornament.rotation.z = Math.PI / 4;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 240;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#171510';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#af853e';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#e9c66d';
+            ctx.font = 'bold 89px Tahoma, sans-serif';
+            ctx.fillText('โรงเรียนสภาราชินี ๒', canvas.width / 2, 79, 960);
+            ctx.font = 'bold 63px Arial, sans-serif';
+            ctx.fillText('SAPARACHINEE 2 SCHOOL', canvas.width / 2, 169, 960);
+
+            const plaque = new THREE.Mesh(
+                new THREE.PlaneGeometry(10.04, 2.3),
+                new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas) })
+            );
+            plaque.position.set(0, 2.02, 0.46);
+            group.add(plaque);
+            scene.add(group);
+        }
+
+        function createFenceLine(x1, z1, x2, z2) {
+            const dx = x2 - x1;
+            const dz = z2 - z1;
+            const length = Math.sqrt(dx * dx + dz * dz);
+            const angle = Math.atan2(dz, dx);
+
+            const fenceGeo = new THREE.BoxGeometry(length, 1.4, 0.4);
+            const fenceMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+            const fence = new THREE.Mesh(fenceGeo, fenceMat);
+            fence.position.set((x1 + x2) / 2, 0.7, (z1 + z2) / 2);
+            fence.rotation.y = -angle;
+            fence.castShadow = true;
+            fence.receiveShadow = true;
+            scene.add(fence);
+        }
+
+        // ==========================================
+        // 6. สร้างถนนทางหลวง 4046 และถนนภายในโรงเรียน
+        // ==========================================
+        function buildRoadsAndPaths() {
+            const hwyAngle = Math.atan2(-10, 42);
+            buildTrangSikaoHighway(hwyAngle);
+
+            // 2. ถนนเมนหลักฝั่งขวา (คงไว้)
+            createRoadSegment(24, 66, 2, -68, 4.2);
+
+            // 3. ถนนเลียบแนวรั้วฝั่งซ้าย
+            createRoadSegment(-15.374, 70, -44.174, -58, 3.2);
+
+            // 4. ถนนตัดขวางเชื่อมโซนต่างๆ 
+            // [ลบถนนเส้นที่อยู่ด้านหน้าอาคารเรียน 3 ออกตามคำขอ]
+            // createRoadSegment(-31, -49, 4, -58, 3.2); 
+
+            createRoadSegment(-44.174, -58, 2, -68, 3.2);
+
+
+            // ลานอเนกประสงค์
+            const courtGeo = new THREE.BoxGeometry(24, 0.12, 9);
+            const courtMat = new THREE.MeshLambertMaterial({ color: 0x65a30d });
+            const court = new THREE.Mesh(courtGeo, courtMat);
+            court.position.set(-8.5, 0.08, 7);
+            court.rotation.y = -hwyAngle;
+            court.receiveShadow = true;
+            scene.add(court);
+        }
+
+        function buildTrangSikaoHighway(angle) {
+            const highway = new THREE.Group();
+            const length = 260;
+            const laneWidth = 3.6;
+            const medianWidth = 2.2;
+            const roadWidth = 4 * laneWidth + medianWidth;
+            const gardenSetback = 7.5;
+            const offset = (roadWidth - 11) / 2 + gardenSetback;
+            highway.position.set(10 - offset * Math.sin(angle), 0, 72 + offset * Math.cos(angle));
+            highway.rotation.y = -angle;
+            scene.add(highway);
+
+            const asphalt = new THREE.MeshLambertMaterial({ color: 0x334155 });
+            const curb = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
+            const grass = new THREE.MeshLambertMaterial({ color: 0x4c8c42 });
+            const marking = new THREE.MeshBasicMaterial({ color: 0xf8fafc });
+
+            function addStrip(geometry, material, x, y, z) {
+                const strip = new THREE.Mesh(geometry, material);
+                strip.position.set(x, y, z);
+                strip.receiveShadow = true;
+                highway.add(strip);
+            }
+
+            addStrip(new THREE.BoxGeometry(length, 0.15, roadWidth), asphalt, 0, 0.08, 0);
+            const gateX = 24;
+            const openingCenter = (gateX - highway.position.x) / Math.cos(angle);
+            const openingWidth = 22;
+            const openingStart = openingCenter - openingWidth / 2;
+            const openingEnd = openingCenter + openingWidth / 2;
+            for (const [start, end] of [[-length / 2, openingStart], [openingEnd, length / 2]]) {
+                const segmentLength = end - start;
+                const center = (start + end) / 2;
+                addStrip(new THREE.BoxGeometry(segmentLength, 0.36, medianWidth), curb, center, 0.18, 0);
+                addStrip(new THREE.BoxGeometry(segmentLength - 0.4, 0.07, medianWidth - 0.4),
+                    grass, center, 0.38, 0);
+            }
+
+            const edgeGeometry = new THREE.BoxGeometry(length, 0.02, 0.12);
+            const dashGeometry = new THREE.BoxGeometry(3.2, 0.02, 0.14);
+            for (const side of [-1, 1]) {
+                addStrip(edgeGeometry, marking, 0, 0.17, side * (roadWidth / 2 - 0.18));
+                const laneDivider = side * (medianWidth / 2 + laneWidth);
+                for (let x = -length / 2 + 4; x < length / 2 - 2; x += 7) {
+                    addStrip(dashGeometry, marking, x, 0.17, laneDivider);
+                }
+            }
+
+            const label = document.createElement('canvas');
+            label.width = 1024;
+            label.height = 128;
+            const ctx = label.getContext('2d');
+            ctx.font = 'bold 105px Tahoma, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#263546';
+            ctx.lineWidth = 8;
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeText('ถนนตรัง-สิเกา', label.width / 2, label.height / 2, 990);
+            ctx.fillText('ถนนตรัง-สิเกา', label.width / 2, label.height / 2, 990);
+
+            const roadLabel = new THREE.Mesh(
+                new THREE.PlaneGeometry(22.4, 2.8),
+                new THREE.MeshBasicMaterial({
+                    map: new THREE.CanvasTexture(label),
+                    transparent: true,
+                    depthWrite: false,
+                    polygonOffset: true,
+                    polygonOffsetFactor: -1
+                })
+            );
+            roadLabel.rotation.x = -Math.PI / 2;
+            const outerLaneCenter = medianWidth / 2 + 1.5 * laneWidth;
+            roadLabel.position.set(openingEnd + 13, 0.169, outerLaneCenter);
+            highway.add(roadLabel);
+
+            const schoolSideEdge = -roadWidth / 2;
+            const roadEdgeZ = highway.position.z + Math.tan(angle) * (gateX - highway.position.x)
+                + schoolSideEdge / Math.cos(angle);
+            // ต่อทางเข้าจากซุ้มประตูถึงผิวถนนฝั่งโรงเรียน
+            createRoadSegment(gateX, 65.8, gateX, roadEdgeZ + 0.35, 4.2);
+            buildEntranceGardens(highway, schoolSideEdge - gardenSetback / 2);
+        }
+
+        function buildEntranceGardens(highway, z) {
+            const edging = new THREE.MeshLambertMaterial({ color: 0xd6d3c4 });
+            const lawn = new THREE.MeshLambertMaterial({ color: 0x68a745 });
+            const foliage = new THREE.MeshLambertMaterial({ color: 0x317447 });
+            const blossomGeometry = new THREE.SphereGeometry(0.11, 8, 6);
+            const flowerMaterials = [0xffdf66, 0xf6a8b9, 0xf8f4df].map(color =>
+                new THREE.MeshLambertMaterial({ color })
+            );
+            const shrubGeometry = new THREE.SphereGeometry(0.54, 10, 8);
+            const gardenDepth = 4.7;
+
+            for (const [x, length] of [[-6, 25], [29, 22]]) {
+                const bed = new THREE.Group();
+                bed.position.set(x, 0, z);
+                highway.add(bed);
+
+                const border = new THREE.Mesh(new THREE.BoxGeometry(length, 0.21, gardenDepth), edging);
+                border.position.y = 0.13;
+                bed.add(border);
+
+                const grass = new THREE.Mesh(
+                    new THREE.BoxGeometry(length - 0.42, 0.08, gardenDepth - 0.42), lawn
+                );
+                grass.position.y = 0.25;
+                grass.receiveShadow = true;
+                bed.add(grass);
+
+                for (let plantX = -length / 2 + 1.7; plantX < length / 2 - 1; plantX += 2.8) {
+                    const shrub = new THREE.Mesh(shrubGeometry, foliage);
+                    shrub.position.set(plantX, 0.65, -0.88);
+                    shrub.scale.set(1.24, 0.85, 1);
+                    shrub.castShadow = true;
+                    bed.add(shrub);
+
+                    flowerMaterials.forEach((material, index) => {
+                        const flowers = new THREE.Mesh(blossomGeometry, material);
+                        flowers.position.set(plantX + (index - 1) * 0.33, 0.36, 0.77 + (index % 2) * 0.26);
+                        bed.add(flowers);
+                    });
+                }
+            }
+        }
+
+        function createRoadSegment(x1, z1, x2, z2, width) {
+            const dx = x2 - x1;
+            const dz = z2 - z1;
+            const len = Math.sqrt(dx * dx + dz * dz);
+            const angle = Math.atan2(dz, dx);
+
+            const geo = new THREE.BoxGeometry(len, 0.14, width);
+            const mat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set((x1 + x2) / 2, 0.08, (z1 + z2) / 2);
+            mesh.rotation.y = -angle;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        }
+
+        // ==========================================
+        // 7. สร้างสระน้ำในโรงเรียน
+        // ==========================================
+        function buildPonds() {
+            const waterMat = new THREE.MeshPhongMaterial({
+                color: 0x0e7490,
+                emissive: 0x083344,
+                specular: 0x67e8f9,
+                shininess: 80,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            // 1. สระน้ำโซนด้านหน้า
+            const frontPondGroup = new THREE.Group();
+            const fPondGeo = new THREE.BoxGeometry(24, 0.2, 22);
+            const fPondMesh = new THREE.Mesh(fPondGeo, waterMat);
+            fPondMesh.position.set(-4, 0.1, 44);
+            fPondMesh.rotation.y = 0.24;
+            fPondMesh.receiveShadow = true;
+            frontPondGroup.add(fPondMesh);
+
+            const islandGeo = new THREE.CylinderGeometry(4.5, 5.5, 0.6, 16);
+            const islandMat = new THREE.MeshLambertMaterial({ color: 0x3f6212 });
+            const island = new THREE.Mesh(islandGeo, islandMat);
+            island.position.set(-4, 0.25, 44);
+            island.receiveShadow = true;
+            frontPondGroup.add(island);
+
+            addTree(-4, 0.4, 44, 1.3);
+            addTree(-6, 0.4, 45, 0.9);
+            addTree(-2, 0.4, 43, 1.0);
+
+            fPondMesh.userData = { locationId: 'front-pond' };
+            buildingMeshes.push(fPondMesh);
+            scene.add(frontPondGroup);
+
+            // สระเล็กระหว่างอาคาร 1 กับ 2 และสระใหญ่ระหว่างอาคาร 2 กับ 3
+            const pondDimensions = [
+                { id: 'small-pond', width: 12, depth: 6 },
+                { id: 'inner-pond', width: 25, depth: 23 }
+            ];
+            pondDimensions.forEach(({ id, width, depth }) => {
+                const { position } = CAMPUS_LOCATIONS.find(loc => loc.id === id);
+                const geometry = new THREE.BoxGeometry(width, 0.2, depth);
+                const pond = new THREE.Mesh(geometry, waterMat);
+                pond.position.set(position.x, 0.12, position.z);
+                pond.rotation.y = 0.24;
+                pond.receiveShadow = true;
+                pond.userData = { locationId: id };
+                buildingMeshes.push(pond);
+                scene.add(pond);
+            });
+        }
+
+        // ==========================================
+        // 8. สร้างโมเดลอาคารต่างๆ
+        // ==========================================
+        function buildCampusBuildings() {
+            createGateHouse(24, 65, 0.24);
+            createAcademicBuilding({
+                id: 'building-1',
+                x: -6, z: 16,
+                width: 26, depth: 6.5, floors: 3,
+                wallColor: 0xfacc15,
+                trimColor: 0xeab308,
+                roofColor: 0xb91c1c
+            });
+
+            createFutsalCourt();
+            createFlagpole(-7, 29);
+
+            createAcademicBuilding({
+                id: 'building-2',
+                x: -11, z: -2,
+                width: 26, depth: 6.5, floors: 3,
+                wallColor: 0xf8fafc,
+                trimColor: 0x1e3a8a,
+                roofColor: 0x7c2d12,
+                isAdmin: true
+            });
+
+            // สร้างอาคารเรียน 3
+            createSolarMainBuilding({
+                id: 'rear-main-building',
+                x: -13, z: -50,
+                width: 28, depth: 8.5, floors: 3
+            });
+
+            createMujalinBuilding(CAMPUS_LOCATIONS.find(loc => loc.id === 'mujalin-building'));
+
+            createBuilding4({
+                id: 'building-4',
+                x: 11, z: -56,
+                width: 8, depth: 26, floors: 2
+            });
+
+            createCanteenHallGym(CAMPUS_LOCATIONS.find(loc => loc.id === 'canteen-hall-gym'));
+
+            createWorkshopBuildings({
+                id: 'workshop-buildings',
+                x: 19, z: -36
+            });
+        }
+
+        function createGateHouse(x, z, angle) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = angle;
+
+            const masonry = new THREE.MeshLambertMaterial({ color: 0xb9a279 });
+            const gold = new THREE.MeshLambertMaterial({ color: 0xcda44e });
+            const steel = new THREE.MeshLambertMaterial({ color: 0x4b5556 });
+            const roofMat = new THREE.MeshLambertMaterial({ color: 0xd7d8cd, side: THREE.DoubleSide });
+            const wall = new THREE.MeshLambertMaterial({ color: 0xe1d6ad });
+            const tiles = new THREE.MeshLambertMaterial({ color: 0x77463a });
+            const glass = new THREE.MeshLambertMaterial({ color: 0x405153 });
+            const red = new THREE.MeshLambertMaterial({ color: 0xb34234 });
+
+            function addMesh(geometry, material, x, y, z) {
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x, y, z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+                return mesh;
+            }
+
+            function addBox(width, height, depth, material, x, y, z) {
+                return addMesh(new THREE.BoxGeometry(width, height, depth), material, x, y, z);
+            }
+
+            for (const postX of [-3.7, 3.1]) {
+                addBox(0.9, 0.22, 0.9, masonry, postX, 0.11, 0);
+                addBox(0.63, 1.55, 0.63, masonry, postX, 0.95, 0);
+                addBox(0.87, 0.19, 0.87, gold, postX, 1.8, 0);
+                addBox(0.69, 0.16, 0.69, gold, postX, 1.97, 0);
+                const finial = addMesh(new THREE.ConeGeometry(0.48, 0.76, 4), gold, postX, 2.43, 0);
+                finial.rotation.y = Math.PI / 4;
+            }
+
+            // ไม้กั้นยกขึ้นข้างช่องรถ
+            const pivot = new THREE.Group();
+            pivot.position.set(-2.85, 1.05, -0.8);
+            pivot.rotation.z = Math.PI / 2.55;
+            group.add(pivot);
+            addBox(0.42, 1.05, 0.45, steel, -2.85, 0.53, -0.8);
+            const barrier = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.13, 0.14), wall);
+            barrier.position.x = 2.4;
+            pivot.add(barrier);
+            for (const x of [0.45, 1.55, 2.65, 3.75, 4.55]) {
+                const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.15), red);
+                stripe.position.x = x;
+                pivot.add(stripe);
+            }
+
+            // หลังคาโค้งคลุมทางเดินด้านขวาเมื่อมองจากถนน
+            const canopyX = 5.2;
+            for (const z of [-1.4, -5.2, -9]) {
+                for (const x of [canopyX - 1.33, canopyX + 1.33]) {
+                    addBox(0.13, 2.62, 0.13, steel, x, 1.31, z);
+                }
+                addBox(2.9, 0.14, 0.17, steel, canopyX, 2.6, z);
+            }
+            const roofProfile = new THREE.Shape();
+            roofProfile.moveTo(-1.64, 0);
+            roofProfile.quadraticCurveTo(0, 0.89, 1.64, 0);
+            roofProfile.lineTo(1.64, -0.09);
+            roofProfile.quadraticCurveTo(0, 0.8, -1.64, -0.09);
+            roofProfile.closePath();
+            addMesh(new THREE.ExtrudeGeometry(roofProfile, { depth: 8.65, bevelEnabled: false }),
+                roofMat, canopyX, 2.74, -9.55);
+
+            addBox(3.05, 2.35, 3.1, wall, 8.9, 1.175, -3.6);
+            addBox(1.48, 0.75, 0.06, glass, 8.9, 1.55, -2.02);
+            const hutRoof = addMesh(new THREE.ConeGeometry(2.53, 1.15, 4), tiles, 8.9, 2.9, -3.6);
+            hutRoof.rotation.y = Math.PI / 4;
+
+            const hitGeo = new THREE.BoxGeometry(10, 6, 6);
+            const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+            const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+            hitMesh.position.set(-1, 3, 0);
+            hitMesh.userData = { locationId: 'gate-4046' };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+
+            scene.add(group);
+        }
+
+        function createAcademicBuilding({ id, x, z, width, depth, floors, wallColor, trimColor, roofColor, isAdmin = false }) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = CAMPUS_ANGLE;
+
+            const floorHeight = 3.2;
+            const totalHeight = floors * floorHeight;
+
+            const bodyGeo = new THREE.BoxGeometry(width, totalHeight, depth);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: wallColor });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = totalHeight / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const winMat = new THREE.MeshPhongMaterial({ color: 0x1e293b, emissive: 0x000000 });
+            const trimMat = new THREE.MeshLambertMaterial({ color: trimColor });
+
+            for (let f = 0; f < floors; f++) {
+                const yCenter = f * floorHeight + floorHeight / 2;
+
+                const trimGeo = new THREE.BoxGeometry(width + 0.3, 0.35, depth + 0.3);
+                const trim = new THREE.Mesh(trimGeo, trimMat);
+                trim.position.y = (f + 1) * floorHeight;
+                group.add(trim);
+
+                for (let i = -5; i <= 5; i++) {
+                    const winGeo = new THREE.BoxGeometry(1.6, 1.4, depth + 0.15);
+                    const win = new THREE.Mesh(winGeo, winMat);
+                    win.position.set(i * 2.1, yCenter, 0);
+                    group.add(win);
+                    nightLights.push(win);
+                }
+            }
+
+            const eaveX = width / 2 + 0.55;
+            const eaveZ = depth / 2 + 0.55;
+            const ridgeX = eaveX - eaveZ;
+            const roofGeo = new THREE.BufferGeometry();
+            roofGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+                -eaveX, 0, eaveZ,
+                eaveX, 0, eaveZ,
+                eaveX, 0, -eaveZ,
+                -eaveX, 0, -eaveZ,
+                -ridgeX, 2.8, 0,
+                ridgeX, 2.8, 0
+            ], 3));
+            roofGeo.setIndex([
+                0, 1, 5, 0, 5, 4,
+                1, 2, 5,
+                2, 3, 4, 2, 4, 5,
+                3, 0, 4
+            ]);
+            const roofFaces = roofGeo.toNonIndexed();
+            roofFaces.computeVertexNormals();
+            const roofMat = new THREE.MeshLambertMaterial({ color: roofColor });
+            const roof = new THREE.Mesh(roofFaces, roofMat);
+            roof.position.y = totalHeight + 0.18;
+            roof.castShadow = true;
+            group.add(roof);
+
+            if (isAdmin) {
+                const porchGeo = new THREE.BoxGeometry(5.5, floorHeight * 1.15, 1.8);
+                const porchMat = new THREE.MeshLambertMaterial({ color: 0x1e3a8a });
+                const porch = new THREE.Mesh(porchGeo, porchMat);
+                porch.position.set(0, (floorHeight * 1.15) / 2, depth / 2 + 0.6);
+                porch.castShadow = true;
+                group.add(porch);
+
+                const signGeo = new THREE.BoxGeometry(6.2, 0.75, 0.3);
+                const signMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+                const sign = new THREE.Mesh(signGeo, signMat);
+                sign.position.set(0, floorHeight * 1.25, depth / 2 + 1.45);
+                group.add(sign);
+            }
+
+            const hitGeo = new THREE.BoxGeometry(width + 1, totalHeight + 3, depth + 1);
+            const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+            const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+            hitMesh.position.y = (totalHeight + 3) / 2;
+            hitMesh.userData = { locationId: id };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+
+            scene.add(group);
+        }
+
+        function createFutsalCourt() {
+            const court = new THREE.Group();
+            court.position.set(-7.03, 0, 23.78);
+            court.rotation.y = CAMPUS_ANGLE;
+            const surface = new THREE.MeshLambertMaterial({ color: 0x217f86 });
+            const markings = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const goalFrame = new THREE.MeshLambertMaterial({ color: 0xf1f5f9 });
+
+            function addBox(width, height, depth, material, x, y, z) {
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+                mesh.position.set(x, y, z);
+                mesh.receiveShadow = true;
+                court.add(mesh);
+            }
+
+            addBox(24, 0.1, 7, surface, 0, 0.105, 0);
+            for (const side of [-1, 1]) {
+                addBox(22, 0.012, 0.09, markings, 0, 0.165, side * 3.1);
+                addBox(0.09, 0.012, 6.2, markings, side * 11, 0.165, 0);
+                addBox(0.09, 0.012, 3.9, markings, side * 8.25, 0.165, 0);
+                for (const edge of [-1, 1]) {
+                    addBox(2.75, 0.012, 0.09, markings, side * 9.625, 0.165, edge * 1.95);
+                    addBox(0.1, 1.25, 0.1, goalFrame, side * 11, 0.79, edge * 0.99);
+                    addBox(0.82, 0.08, 0.08, goalFrame, side * 11.41, 0.205, edge * 0.99);
+                }
+                addBox(0.1, 0.1, 2.08, goalFrame, side * 11, 1.42, 0);
+            }
+            addBox(0.09, 0.012, 6.2, markings, 0, 0.165, 0);
+
+            const centerCircle = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.14, 40), markings);
+            centerCircle.rotation.x = -Math.PI / 2;
+            centerCircle.position.y = 0.174;
+            court.add(centerCircle);
+
+            const centerSpot = new THREE.Mesh(new THREE.CircleGeometry(0.13, 16), markings);
+            centerSpot.rotation.x = -Math.PI / 2;
+            centerSpot.position.y = 0.174;
+            court.add(centerSpot);
+            scene.add(court);
+        }
+
+        function createFlagpole(x, z) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+            const flagBaseGeo = new THREE.CylinderGeometry(1.1, 1.4, 0.5, 16);
+            const flagBaseMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+            const flagBase = new THREE.Mesh(flagBaseGeo, flagBaseMat);
+            flagBase.position.set(0, 0.25, 0);
+            group.add(flagBase);
+
+            const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 11, 8);
+            const poleMat = new THREE.MeshPhongMaterial({ color: 0xf8fafc, shininess: 100 });
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.set(0, 5.5, 0);
+            pole.castShadow = true;
+            group.add(pole);
+
+            const stripes = [
+                { color: 0xb91c1c, height: 0.2 },
+                { color: 0xffffff, height: 0.2 },
+                { color: 0x1e3a8a, height: 0.4 },
+                { color: 0xffffff, height: 0.2 },
+                { color: 0xb91c1c, height: 0.2 }
+            ];
+            let stripeTop = 10.8;
+            stripes.forEach(({ color, height }) => {
+                const geometry = new THREE.BoxGeometry(1.8, height, 0.06);
+                const material = new THREE.MeshLambertMaterial({ color });
+                const stripe = new THREE.Mesh(geometry, material);
+                stripe.position.set(0.96, stripeTop - height / 2, 0);
+                group.add(stripe);
+                stripeTop -= height;
+            });
+            scene.add(group);
+        }
+
+        function createSolarMainBuilding({ id, x, z, width, depth, floors = 3 }) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = CAMPUS_ANGLE;
+
+            const floorHeight = 3.2;
+            const bodyHeight = floors * floorHeight;
+            const roofSlabHeight = 0.8;
+            const totalHeight = bodyHeight + roofSlabHeight;
+
+            const bodyGeo = new THREE.BoxGeometry(width, bodyHeight, depth);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = bodyHeight / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const winMat = new THREE.MeshPhongMaterial({ color: 0x1e293b, emissive: 0x000000 });
+            const trimMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+
+            for (let f = 0; f < floors; f++) {
+                const yCenter = f * floorHeight + floorHeight / 2;
+
+                const trim = new THREE.Mesh(
+                    new THREE.BoxGeometry(width + 0.3, 0.3, depth + 0.3),
+                    trimMat
+                );
+                trim.position.y = (f + 1) * floorHeight;
+                group.add(trim);
+
+                for (let i = -5; i <= 5; i++) {
+                    const win = new THREE.Mesh(
+                        new THREE.BoxGeometry(2.0, 1.8, depth + 0.15),
+                        winMat
+                    );
+                    win.position.set(i * 2.4, yCenter, 0);
+                    group.add(win);
+                    nightLights.push(win);
+                }
+            }
+
+            const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 1.2, roofSlabHeight, depth + 1.2),
+                new THREE.MeshLambertMaterial({ color: 0xf1f5f9 })
+            );
+            roof.position.y = bodyHeight + roofSlabHeight / 2;
+            roof.castShadow = true;
+            group.add(roof);
+
+            const solarMat = new THREE.MeshPhongMaterial({
+                color: 0x1e3a8a,
+                specular: 0x60a5fa,
+                shininess: 100
+            });
+            const solarY = bodyHeight + roofSlabHeight + 0.08;
+            for (let row = -1; row <= 1; row += 2) {
+                for (let i = -5; i <= 5; i++) {
+                    const panel = new THREE.Mesh(
+                        new THREE.BoxGeometry(1.8, 0.15, 2.2),
+                        solarMat
+                    );
+                    panel.position.set(i * 2.2, solarY, row * 1.8);
+                    panel.rotation.x = row * 0.12;
+                    group.add(panel);
+                }
+            }
+
+            const hitMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 1.5, totalHeight + 2, depth + 1.5),
+                new THREE.MeshBasicMaterial({ visible: false })
+            );
+            hitMesh.position.y = (totalHeight + 2) / 2;
+            hitMesh.userData = { locationId: id };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+
+            scene.add(group);
+        }
+
+        function createMujalinBuilding({ id, position }) {
+            const group = new THREE.Group();
+            group.position.set(position.x, position.y, position.z);
+            group.rotation.y = 0.19;
+
+            const width = 25;
+            const depth = 4.2;
+            const wallHeight = 2.9;
+            const roomWidth = width / 3;
+            const wallMat = new THREE.MeshLambertMaterial({ color: 0xffedcf });
+            const roofMat = new THREE.MeshLambertMaterial({ color: 0x12665c });
+            const doorMat = new THREE.MeshLambertMaterial({ color: 0x70472e });
+            const windowMat = new THREE.MeshPhongMaterial({ color: 0x243a4a, emissive: 0x000000 });
+
+            function addBox(w, h, d, x, y, z, material) {
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+                mesh.position.set(x, y, z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+                return mesh;
+            }
+
+            addBox(width, wallHeight, depth, 0, wallHeight / 2, 0, wallMat);
+
+            const roofPitch = 0.24;
+            const roofHalfDepth = depth / 2 + 0.36;
+            for (const side of [-1, 1]) {
+                const roof = addBox(width + 0.6, 0.2, roofHalfDepth / Math.cos(roofPitch),
+                    0, wallHeight + 0.22, side * roofHalfDepth / 2, roofMat);
+                roof.rotation.x = side * roofPitch;
+            }
+
+            // ประตูทั้งสามห้องหันเข้าหาถนน
+            const facadeZ = depth / 2 + 0.04;
+            for (let room = -1; room <= 1; room++) {
+                const centerX = room * roomWidth;
+                addBox(1.25, 2.17, 0.12, centerX - 2.15, 1.1, facadeZ, doorMat);
+                const window = addBox(2.45, 0.95, 0.12, centerX + 0.9, 1.65, facadeZ, windowMat);
+                nightLights.push(window);
+                addBox(2.45, 0.95, 0.12, centerX + 0.9, 1.65, -facadeZ, windowMat);
+            }
+
+            const hitMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 0.6, 3.7, depth + 0.72),
+                new THREE.MeshBasicMaterial({ visible: false })
+            );
+            hitMesh.position.y = 1.85;
+            hitMesh.userData = { locationId: id };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+            scene.add(group);
+        }
+
+        function createBuilding4({ id, x, z, width, depth, floors = 2 }) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = CAMPUS_ANGLE;
+
+            const stiltH = 3.0;
+            const floorH = 3.2;
+            const slabH = 0.3;
+            const bodyH = floors * floorH;
+            const topY = stiltH + slabH + bodyH;
+
+            const grayMat = new THREE.MeshLambertMaterial({ color: 0x9ca3af });
+            const darkGrayMat = new THREE.MeshLambertMaterial({ color: 0x6b7280 });
+            const pillarMat = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
+
+            const pad = new THREE.Mesh(new THREE.BoxGeometry(width + 1.2, 0.12, depth + 1.2), new THREE.MeshLambertMaterial({ color: 0xcbd5e1 }));
+            pad.position.y = 0.1;
+            pad.receiveShadow = true;
+            group.add(pad);
+
+            const pillarGeo = new THREE.BoxGeometry(0.7, stiltH, 0.7);
+            for (let z0 = -depth / 2 + 1; z0 <= depth / 2 - 0.9; z0 += (depth - 2) / 6) {
+                for (const sx of [-1, 1]) {
+                    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                    pillar.position.set(sx * (width / 2 - 0.6), stiltH / 2, z0);
+                    pillar.castShadow = true;
+                    group.add(pillar);
+                }
+            }
+
+            const slab = new THREE.Mesh(new THREE.BoxGeometry(width + 0.4, slabH, depth + 0.4), darkGrayMat);
+            slab.position.y = stiltH + slabH / 2;
+            slab.castShadow = true;
+            slab.receiveShadow = true;
+            group.add(slab);
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(width, bodyH, depth), grayMat);
+            body.position.y = stiltH + slabH + bodyH / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const winMat = new THREE.MeshPhongMaterial({ color: 0x1e293b, emissive: 0x000000 });
+            for (let f = 0; f < floors; f++) {
+                const yC = stiltH + slabH + f * floorH + floorH / 2;
+                const trim = new THREE.Mesh(new THREE.BoxGeometry(width + 0.3, 0.3, depth + 0.3), darkGrayMat);
+                trim.position.y = stiltH + slabH + (f + 1) * floorH;
+                group.add(trim);
+
+                for (let i = -5; i <= 5; i++) {
+                    const win = new THREE.Mesh(new THREE.BoxGeometry(width + 0.15, 1.4, 1.6), winMat);
+                    win.position.set(0, yC, i * 2.2);
+                    group.add(win);
+                    nightLights.push(win);
+                }
+            }
+
+            const eaveX = depth / 2 + 0.6;
+            const eaveZ = width / 2 + 0.6;
+            const ridgeX = eaveX - eaveZ;
+            const roofGeo = new THREE.BufferGeometry();
+            roofGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+                -eaveX, 0, eaveZ,
+                eaveX, 0, eaveZ,
+                eaveX, 0, -eaveZ,
+                -eaveX, 0, -eaveZ,
+                -ridgeX, 2.4, 0,
+                ridgeX, 2.4, 0
+            ], 3));
+            roofGeo.setIndex([
+                0, 1, 5, 0, 5, 4,
+                1, 2, 5,
+                2, 3, 4, 2, 4, 5,
+                3, 0, 4
+            ]);
+            const roofFaces = roofGeo.toNonIndexed();
+            roofFaces.computeVertexNormals();
+            const roof = new THREE.Mesh(roofFaces, new THREE.MeshLambertMaterial({ color: 0x1d4ed8, side: THREE.DoubleSide }));
+            roof.rotation.y = Math.PI / 2;
+            roof.position.y = topY + 0.15;
+            roof.castShadow = true;
+            group.add(roof);
+
+            const totalH = topY + 3;
+            const hitMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 1, totalH, depth + 1),
+                new THREE.MeshBasicMaterial({ visible: false })
+            );
+            hitMesh.position.y = totalH / 2;
+            hitMesh.userData = { locationId: id };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+
+            scene.add(group);
+        }
+
+        function createCanteenHallGym({ id, position }) {
+            const group = new THREE.Group();
+            group.position.set(position.x, position.y, position.z);
+            group.rotation.y = CAMPUS_ANGLE;
+
+            const width = 23;
+            const depth = 14;
+            const canteenHeight = 3.4;
+            const hallHeight = 5.2;
+            const roofHeight = 0.65;
+            const height = canteenHeight + hallHeight + roofHeight;
+
+            const canteen = new THREE.Mesh(
+                new THREE.BoxGeometry(width, canteenHeight, depth),
+                new THREE.MeshLambertMaterial({ color: 0xffedd5 })
+            );
+            canteen.position.y = canteenHeight / 2;
+            group.add(canteen);
+
+            const hall = new THREE.Mesh(
+                new THREE.BoxGeometry(width, hallHeight, depth),
+                new THREE.MeshLambertMaterial({ color: 0xf1f5f9 })
+            );
+            hall.position.y = canteenHeight + hallHeight / 2;
+            group.add(hall);
+
+            const trimMaterial = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const floorBand = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 0.4, 0.3, depth + 0.4),
+                trimMaterial
+            );
+            floorBand.position.y = canteenHeight;
+            group.add(floorBand);
+
+            const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 1.1, roofHeight, depth + 1.1),
+                trimMaterial
+            );
+            roof.position.y = height - roofHeight / 2;
+            group.add(roof);
+
+            const windowMaterial = new THREE.MeshPhongMaterial({ color: 0x1e3a5f, emissive: 0x000000 });
+            const lowerWindow = new THREE.BoxGeometry(3.1, 2.25, depth + 0.1);
+            const upperWindow = new THREE.BoxGeometry(3.1, 1.25, depth + 0.12);
+            for (let i = -2; i <= 2; i++) {
+                const storefront = new THREE.Mesh(lowerWindow, windowMaterial);
+                storefront.position.set(i * 4.3, 1.65, 0);
+                group.add(storefront);
+                nightLights.push(storefront);
+
+                const clerestory = new THREE.Mesh(upperWindow, windowMaterial);
+                clerestory.position.set(i * 4.3, canteenHeight + 3.15, 0);
+                group.add(clerestory);
+                nightLights.push(clerestory);
+            }
+
+            const door = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.65, 3.1), windowMaterial);
+            door.position.set(-width / 2, 1.325, 0);
+            group.add(door);
+            nightLights.push(door);
+
+            for (const surface of [canteen, hall, roof]) {
+                surface.castShadow = true;
+                surface.receiveShadow = true;
+            }
+
+            const hitbox = new THREE.Mesh(
+                new THREE.BoxGeometry(width + 1.1, height, depth + 1.1),
+                new THREE.MeshBasicMaterial({ visible: false })
+            );
+            hitbox.position.y = height / 2;
+            hitbox.userData = { locationId: id };
+            group.add(hitbox);
+            buildingMeshes.push(hitbox);
+            scene.add(group);
+        }
+
+        function createWorkshopBuildings({ id, x, z }) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            group.rotation.y = CAMPUS_ANGLE;
+
+            const b1Geo = new THREE.BoxGeometry(11, 3.6, 5.5);
+            const b1Mat = new THREE.MeshLambertMaterial({ color: 0xf1f5f9 });
+            const b1 = new THREE.Mesh(b1Geo, b1Mat);
+            b1.position.set(-2, 1.8, -3);
+            b1.castShadow = true;
+
+            const r1Geo = new THREE.BoxGeometry(11.6, 0.5, 6.0);
+            const r1Mat = new THREE.MeshLambertMaterial({ color: 0x7c2d12 });
+            const r1 = new THREE.Mesh(r1Geo, r1Mat);
+            r1.position.set(-2, 3.8, -3);
+
+            const b2Geo = new THREE.BoxGeometry(6.5, 3.4, 8.5);
+            const b2 = new THREE.Mesh(b2Geo, b1Mat);
+            b2.position.set(1, 1.7, 5);
+            b2.castShadow = true;
+
+            const r2Geo = new THREE.BoxGeometry(7.0, 0.5, 9.0);
+            const r2 = new THREE.Mesh(r2Geo, r1Mat);
+            r2.position.set(1, 3.6, 5);
+
+            group.add(b1, r1, b2, r2);
+
+            const hitGeo = new THREE.BoxGeometry(14, 5, 16);
+            const hitMesh = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({ visible: false }));
+            hitMesh.position.set(-1, 2.5, 1);
+            hitMesh.userData = { locationId: id };
+            group.add(hitMesh);
+            buildingMeshes.push(hitMesh);
+
+            scene.add(group);
+        }
+
+        // ==========================================
+        // 9. สร้างต้นไม้และพื้นที่สีเขียว
+        // ==========================================
+        function buildTreesAndFoliage() {
+            const treeCoords = [
+                [-14, 55], [-16, 46], [-18, 37], [6, 54], [8, 44], [10, 35],
+                [14, 56], [16, 48], [18, 38], [-12, 31], [-2, 30], [7, 28],
+                [-20, 12], [6, 8], [-23, -6], [3, -10], [-27, -26], [2, -28],
+                [-30, -38], [-32, -46], [-2, -46], [-34, -55], [-6, -70],
+                [-35, 45], [-42, 30], [-45, 10], [-48, -15], [-50, -40],
+                [51, 47], [42, 15], [45, -10], [40, -45], [32, -68]
+            ];
+
+            treeCoords.forEach(([tx, tz], idx) => {
+                const scale = 0.85 + (idx % 4) * 0.22;
+                addTree(tx, 0, tz, scale);
+            });
+
+            // เพิ่มต้นมะพร้าวรอบสระน้ำโซนใน (Inner Pond)
+            addPalmTree(-28, 0, -24, 1.2);
+            addPalmTree(-29, 0, -40, 1.1);
+            addPalmTree(-1, 0, -27, 1.3);
+            addPalmTree(-2, 0, -42, 1.0);
+            addPalmTree(-12, 0, -20, 1.1);
+
+            // เพิ่มต้นมะพร้าวรอบสระน้ำโซนหน้า (Front Pond)
+            addPalmTree(-16, 0, 38, 1.2);
+            addPalmTree(6, 0, 38, 1.1);
+            addPalmTree(-10, 0, 55, 1.3);
+            addPalmTree(2, 0, 55, 1.0);
+        }
+
+        function addTree(x, y, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            treeGroup.position.set(x, y, z);
+
+            const trunkGeo = new THREE.CylinderGeometry(0.25 * scale, 0.4 * scale, 2.2 * scale, 7);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1.1 * scale;
+            trunk.castShadow = true;
+
+            const crownColor = Math.random() > 0.4 ? 0x2d6a4f : 0x40916c;
+            const crownMat = new THREE.MeshLambertMaterial({ color: crownColor });
+
+            const crown1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.8 * scale, 1), crownMat);
+            crown1.position.y = 2.8 * scale;
+            crown1.castShadow = true;
+
+            const crown2 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.3 * scale, 1), crownMat);
+            crown2.position.set(0.6 * scale, 3.6 * scale, 0.4 * scale);
+            crown2.castShadow = true;
+
+            treeGroup.add(trunk, crown1, crown2);
+            scene.add(treeGroup);
+        }
+
+        // ฟังก์ชันสร้างต้นมะพร้าว
+        function addPalmTree(x, y, z, scale = 1) {
+            const treeGroup = new THREE.Group();
+            treeGroup.position.set(x, y, z);
+
+            // ลำต้น (โค้งงอเล็กน้อย)
+            const trunkGeo = new THREE.CylinderGeometry(0.15 * scale, 0.35 * scale, 5.0 * scale, 8);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 2.5 * scale;
+            trunk.rotation.z = (Math.random() - 0.5) * 0.2; // เอียงลำต้น
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            // ทางมะพร้าว (ใช้ทรงกรวยแบน)
+            const leafMat = new THREE.MeshLambertMaterial({ color: 0x2d6a4f, side: THREE.DoubleSide });
+            for (let i = 0; i < 6; i++) {
+                const leafGeo = new THREE.ConeGeometry(0.6 * scale, 3.5 * scale, 4);
+                const leaf = new THREE.Mesh(leafGeo, leafMat);
+                const angle = (i / 6) * Math.PI * 2;
+                leaf.position.set(Math.cos(angle) * 1.2 * scale, 5.0 * scale, Math.sin(angle) * 1.2 * scale);
+                leaf.rotation.x = Math.PI / 2 + 0.3;
+                leaf.rotation.z = angle;
+                leaf.castShadow = true;
+                treeGroup.add(leaf);
+            }
+
+            // ยอดมะพร้าว
+            const topGeo = new THREE.DodecahedronGeometry(0.5 * scale, 0);
+            const top = new THREE.Mesh(topGeo, leafMat);
+            top.position.y = 5.0 * scale;
+            treeGroup.add(top);
+
+            scene.add(treeGroup);
+        }
+
+        // ==========================================
+        // 10. ระบบ UI
+        // ==========================================
+        function setupUI() {
+            const listContainer = document.getElementById('building-list');
+            renderBuildingList(CAMPUS_LOCATIONS);
+
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                const keyword = e.target.value.trim().toLowerCase();
+                const filtered = CAMPUS_LOCATIONS.filter(item =>
+                    item.name.toLowerCase().includes(keyword) ||
+                    item.category.toLowerCase().includes(keyword) ||
+                    item.description.toLowerCase().includes(keyword)
+                );
+                renderBuildingList(filtered);
+            });
+        }
+
+        function renderBuildingList(items) {
+            const listContainer = document.getElementById('building-list');
+            listContainer.innerHTML = '';
+
+            if (items.length === 0) {
+                listContainer.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">ไม่พบสถานที่ที่ค้นหา</div>`;
+                return;
+            }
+
+            items.forEach((loc, index) => {
+                const isSelected = loc.id === selectedLocationId;
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${isSelected
+                        ? 'bg-blue-50 dark:bg-blue-900/40 border-blue-500 shadow-sm'
+                        : 'bg-white/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200/60 dark:border-slate-700/60'
+                    }`;
+
+                btn.innerHTML = `
+                    <div class="w-6 h-6 rounded-lg ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'} flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                        ${index + 1}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs md:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">${loc.shortName}</div>
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">${loc.category}</div>
+                    </div>
+                `;
+
+                btn.addEventListener('click', () => {
+                    focusOnLocation(loc.id);
+                    if (window.innerWidth < 768) {
+                        document.getElementById('sidebar').classList.add('-translate-x-[120%]');
+                    }
+                });
+
+                listContainer.appendChild(btn);
+            });
+        }
+
+        function createFloatingLabels() {
+            const container = document.getElementById('labels-container');
+            CAMPUS_LOCATIONS.forEach(loc => {
+                const el = document.createElement('div');
+                el.className = 'building-label';
+                el.textContent = loc.shortName;
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    focusOnLocation(loc.id);
+                });
+                container.appendChild(el);
+                labelElements[loc.id] = el;
+            });
+        }
+
+        function updateFloatingLabels() {
+            if (!showLabels) return;
+
+            const tempV = new THREE.Vector3();
+            CAMPUS_LOCATIONS.forEach(loc => {
+                const el = labelElements[loc.id];
+                if (!el) return;
+
+                let yOffset;
+                if (loc.id.includes('pond') || loc.id === 'gate-4046') {
+                    yOffset = 4;
+                } else if (loc.id === 'rear-main-building') {
+                    yOffset = 14;
+                } else {
+                    yOffset = 11;
+                }
+
+                tempV.set(loc.position.x, loc.labelHeight ?? yOffset, loc.position.z);
+                tempV.project(camera);
+
+                if (tempV.z > 1) {
+                    el.style.display = 'none';
+                } else {
+                    const x = (tempV.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
+                    el.style.display = 'block';
+                    el.style.left = `${x}px`;
+                    el.style.top = `${y}px`;
+                }
+            });
+        }
+
+        // ==========================================
+        // 11. โฟกัสกล้อง
+        // ==========================================
+        function focusOnLocation(locationId) {
+            const loc = CAMPUS_LOCATIONS.find(l => l.id === locationId);
+            if (!loc) return;
+
+            selectedLocationId = locationId;
+
+            targetControlsLookAt.set(loc.position.x, 3, loc.position.z);
+            targetCameraPos.set(loc.cameraOffset.x, loc.cameraOffset.y, loc.cameraOffset.z);
+            isCameraTransitioning = true;
+
+            renderBuildingList(CAMPUS_LOCATIONS);
+            Object.keys(labelElements).forEach(id => {
+                labelElements[id].classList.toggle('active', id === locationId);
+            });
+
+            showDetailCard(loc);
+        }
+
+        function showDetailCard(loc) {
+            const card = document.getElementById('detail-card');
+            document.getElementById('detail-badge').textContent = loc.category;
+            document.getElementById('detail-floors').textContent = loc.floors;
+            document.getElementById('detail-title').textContent = loc.name;
+            document.getElementById('detail-desc').textContent = loc.description;
+
+            const highlightsUl = document.getElementById('detail-highlights');
+            highlightsUl.innerHTML = loc.highlights.map(h => `<li>${h}</li>`).join('');
+
+            card.classList.remove('translate-y-[150%]', 'opacity-0', 'pointer-events-none');
+        }
+
+        function hideDetailCard() {
+            selectedLocationId = null;
+            const card = document.getElementById('detail-card');
+            card.classList.add('translate-y-[150%]', 'opacity-0', 'pointer-events-none');
+
+            renderBuildingList(CAMPUS_LOCATIONS);
+            Object.keys(labelElements).forEach(id => {
+                labelElements[id].classList.remove('active');
+            });
+        }
+
+        // ==========================================
+        // 12. Event Listeners
+        // ==========================================
+        function setupEvents() {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            let pointerDownPos = { x: 0, y: 0 };
+
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                pointerDownPos = { x: e.clientX, y: e.clientY };
+            });
+
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+                if (dist > 6) return;
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(buildingMeshes);
+
+                if (intersects.length > 0) {
+                    const hitObj = intersects[0].object;
+                    if (hitObj.userData && hitObj.userData.locationId) {
+                        focusOnLocation(hitObj.userData.locationId);
+                    }
+                }
+            });
+
+            renderer.domElement.addEventListener('pointermove', (e) => {
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(buildingMeshes);
+                renderer.domElement.style.cursor = intersects.length > 0 ? 'pointer' : 'grab';
+            });
+
+            document.getElementById('btn-reset-view').addEventListener('click', () => {
+                hideDetailCard();
+                targetCameraPos.copy(DEFAULT_CAM_POS);
+                targetControlsLookAt.copy(DEFAULT_LOOK_AT);
+                isCameraTransitioning = true;
+            });
+
+            document.getElementById('btn-toggle-labels').addEventListener('click', () => {
+                showLabels = !showLabels;
+                const container = document.getElementById('labels-container');
+                container.style.display = showLabels ? 'block' : 'none';
+            });
+
+            document.getElementById('btn-toggle-theme').addEventListener('click', () => {
+                isNightMode = !isNightMode;
+                const icon = document.getElementById('theme-icon');
+                const text = document.getElementById('theme-text');
+
+                if (isNightMode) {
+                    document.documentElement.classList.add('dark');
+                    icon.textContent = '🌙';
+                    text.textContent = 'กลางคืน';
+                    scene.background = new THREE.Color(0x0b132b);
+                    scene.fog.color = new THREE.Color(0x0b132b);
+                    sunLight.intensity = 0.25;
+                    sunLight.color.setHex(0x64748b);
+                    hemiLight.intensity = 0.25;
+                    ambientLight.intensity = 0.15;
+                    nightLights.forEach(win => {
+                        win.material.emissive.setHex(0xfef08a);
+                        win.material.emissiveIntensity = 0.85;
+                    });
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    icon.textContent = '☀️';
+                    text.textContent = 'กลางวัน';
+                    scene.background = new THREE.Color(0x87ceeb);
+                    scene.fog.color = new THREE.Color(0x87ceeb);
+                    sunLight.intensity = 1.15;
+                    sunLight.color.setHex(0xfff5e4);
+                    hemiLight.intensity = 0.65;
+                    ambientLight.intensity = 0.35;
+                    nightLights.forEach(win => {
+                        win.material.emissive.setHex(0x000000);
+                        win.material.emissiveIntensity = 0;
+                    });
+                }
+            });
+
+            document.getElementById('close-detail-btn').addEventListener('click', hideDetailCard);
+
+            const sidebar = document.getElementById('sidebar');
+            document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-[120%]');
+            });
+            document.getElementById('close-sidebar-btn').addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-[120%]');
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // ==========================================
+        // 13. Animation Loop
+        // ==========================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isCameraTransitioning) {
+                camera.position.lerp(targetCameraPos, 0.06);
+                controls.target.lerp(targetControlsLookAt, 0.06);
+
+                if (camera.position.distanceTo(targetCameraPos) < 0.3 &&
+                    controls.target.distanceTo(targetControlsLookAt) < 0.3) {
+                    isCameraTransitioning = false;
+                }
+            }
+
+            controls.update();
+            updateFloatingLabels();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            init();
+            animate();
+        };
+    </script>
+</body>
+
+</html>
